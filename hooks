@@ -153,9 +153,10 @@ def populate_chains(dnat_chain, snat_chain, fwd_chain, public_ip, private_ip, do
             public_port, private_port = ports if isinstance(ports, list) else [
                 ports, ports]
             dest = "{0}:{1}".format(private_ip, str(private_port))
-            subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", dnat_chain, "-p", protocol,
-                             "-d", public_ip, "--dport", str(public_port), "-j", "DNAT", "--to", dest] +
-                            (["-s", source_ip] if source_ip else []))
+            for ip in public_ip:
+                subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", dnat_chain, "-p", protocol,
+                                 "-d", ip, "--dport", str(public_port), "-j", "DNAT", "--to", dest] +
+                                (["-s", source_ip] if source_ip else []))
             subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", snat_chain, "-p", protocol,
                              "-s", private_ip, "-d", private_ip, "--dport", str(public_port), "-j", "MASQUERADE"])
             interface = ["-o", domain["interface"]
@@ -170,8 +171,9 @@ def populate_chains(dnat_chain, snat_chain, fwd_chain, public_ip, private_ip, do
                            str(port_range["init_port"] + port_range["ports_num"] - 1))
             dest = "{0}:{1}".format(
                 private_ip, ports_range.replace(":", "-", 1))
-            subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", dnat_chain, "-p", port_range["protocol"],
-                             "-d", public_ip, "--dport", ports_range, "-j", "DNAT", "--to", dest])
+            for ip in public_ip:
+                subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", dnat_chain, "-p", port_range["protocol"],
+                                 "-d", ip, "--dport", ports_range, "-j", "DNAT", "--to", dest])
             subprocess.call([IPTABLES_BINARY, "-t", "nat", "-A", snat_chain, "-p", port_range["protocol"],
                              "-s", private_ip, "-d", private_ip, "--dport", ports_range, "-j", "MASQUERADE"])
             interface = ["-o", domain["interface"]
@@ -182,10 +184,11 @@ def populate_chains(dnat_chain, snat_chain, fwd_chain, public_ip, private_ip, do
 
 def insert_chains(action, dnat_chain, snat_chain, fwd_chain, public_ip, private_ip):
     """ inserts (action='-I') or removes (action='-D') the custom chains."""
-    subprocess.call([IPTABLES_BINARY, "-t", "nat", action,
-                     "OUTPUT", "-d", public_ip, "-j", dnat_chain])
-    subprocess.call([IPTABLES_BINARY, "-t", "nat", action,
-                     "PREROUTING", "-d", public_ip, "-j", dnat_chain])
+    for ip in public_ip:
+        subprocess.call([IPTABLES_BINARY, "-t", "nat", action,
+                         "OUTPUT", "-d", ip, "-j", dnat_chain])
+        subprocess.call([IPTABLES_BINARY, "-t", "nat", action,
+                         "PREROUTING", "-d", ip, "-j", dnat_chain])
     subprocess.call([IPTABLES_BINARY, "-t", "nat", action, "POSTROUTING",
                      "-s", private_ip, "-d", private_ip, "-j", snat_chain])
     subprocess.call([IPTABLES_BINARY, "-t", "filter", action,
@@ -232,7 +235,7 @@ if __name__ == "__main__":
     dnat_chain = "DNAT-{0}".format(vir_domain)
     snat_chain = "SNAT-{0}".format(vir_domain)
     fwd_chain = "FWD-{0}".format(vir_domain)
-    public_ip = domain.get("public_ip", host_ip())
+    public_ip = domain.get("public_ip", [host_ip()])
     private_ip = domain["private_ip"]
     source_ip = domain.get("source_ip")
 
